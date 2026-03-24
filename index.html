@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="app-shell">
+
+        <!-- Cloud Sync Status Bar -->
+        <div id="sync-status" style="position: fixed; top: 15px; right: 20px; background: rgba(24, 24, 27, 0.85); padding: 6px 14px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px; border: 1px solid #3f3f46; color: #fff; backdrop-filter: blur(4px); z-index: 1000; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
+            <span class="status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444; transition: background 0.3s ease;"></span>
+            <span class="status-text">Connecting...</span>
+        </div>
+
+        <header class="hero">
+            <div class="hero-left">
+                <p class="eyebrow">Local Tracker</p>
+                <h1>Student attendance management system.</h1>
+            </div>
+
+            <div class="hero-right" style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end;">
+                <div class="feature-box" style="flex: 1; min-width: 180px;">
+                    <h4>⚠️ 75% Alert</h4>
+                    <p>Automatic triggers flagging students falling below compliance thresholds.</p>
+                </div>
+                <div class="feature-box" style="flex: 1; min-width: 180px;">
+                    <h4>📊 Analytics Bars</h4>
+                    <p>High-speed visual chart graphics plotting attendance trends instantly.</p>
+                </div>
+                <div class="feature-box" style="flex: 1; min-width: 180px;">
+                    <h4>⚡ Batch Mark Setup</h4>
+                    <p>Save bulk spreadsheet attendance updates in single-click payload triggers.</p>
+                </div>
+            </div>
+        </header>
+
+        <nav class="page-nav" aria-label="Main navigation">
+            <button class="nav-link active" data-page="dashboard">Dashboard</button>
+            <button class="nav-link" data-page="students">Students & Attendance</button>
+            <button class="nav-link" data-page="batch">Batch Mark</button>
+            <button class="nav-link" data-page="shortage">Shortage List</button>
+            <button class="nav-link" data-page="records">Records</button>
+        </nav>
+
+        <main>
+            <section class="page active" id="dashboard">
+                <div class="cards">
+                    <article class="card">
+                        <p class="card-label">Class Average</p>
+                        <h2 id="class-average">0.00%</h2>
+                        <p class="card-meta">Avg. attendance across the semester</p>
+                    </article>
+
+                    <article class="card">
+                        <p class="card-label">Total Students</p>
+                        <h2 id="total-students">0</h2>
+                        <p class="card-meta">Registered in system</p>
+                    </article>
+
+                    <article class="card warning-card">
+                        <p class="card-label">Below 75%</p>
+                        <h2 id="shortage-count">0</h2>
+                        <p class="card-meta">Students at risk</p>
+                    </article>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Analytics</p>
+                            <h3>Attendance Trends</h3>
+                        </div>
+                    </div>
+                    <div style="height: 300px; position: relative;">
+                        <canvas id="attendance-chart"></canvas>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Overview</p>
+                            <h3>Class Summary</h3>
+                        </div>
+                        <button class="ghost-button" id="refresh-dashboard">Refresh Data</button>
+                    </div>
+                    <p id="dashboard-summary" class="summary-text">
+                        Loading class data...
+                    </p>
+                </section>
+            </section>
+
+            <section class="page" id="students">
+                <div class="two-column">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h3>Add Student</h3>
+                        </div>
+                        <form id="student-form" class="form-grid">
+                            <label>
+                                <span>Reg No</span>
+                                <input type="number" id="student-regno" required>
+                            </label>
+                            <label>
+                                <span>Name</span>
+                                <input type="text" id="student-name" maxlength="49" required>
+                            </label>
+                            <button type="submit" class="primary-button">Add Student</button>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h3>Mark Attendance</h3>
+                        </div>
+                        <form id="attendance-form" class="form-grid">
+                            <label>
+                                <span>Reg No</span>
+                                <input type="number" id="attendance-regno" required>
+                            </label>
+                            <label>
+                                <span>Date</span>
+                                <input type="date" id="attendance-date" required>
+                            </label>
+                            <label>
+                                <span>Status</span>
+                                <select id="attendance-status">
+                                    <option value="P">Present (P)</option>
+                                    <option value="A">Absent (A)</option>
+                                </select>
+                            </label>
+                            <button type="submit" class="primary-button">Save Record</button>
+                        </form>
+                    </section>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <h3>Students List</h3>
+                        <div class="search-box">
+                            <input type="text" id="student-search" placeholder="Filter by name...">
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="cursor: pointer;" onclick="sortTable('students-table-body', 0)">Reg No ↕️</th>
+                                    <th style="cursor: pointer;" onclick="sortTable('students-table-body', 1)">Name ↕️</th>
+                                    <th style="cursor: pointer;" onclick="sortTable('students-table-body', 2)">Attendance ↕️</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="students-table-body">
+                                <tr><td colspan="3" class="empty-state">No students added.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <section class="page" id="batch">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Power Tools</p>
+                            <h3>Batch Attendance Sheet</h3>
+                        </div>
+                    </div>
+                    <div class="form-grid" style="grid-template-columns: 1fr auto; align-items: end; gap: 15px; margin-bottom: 20px;">
+                        <label>
+                            <span>Select Date for Class</span>
+                            <input type="date" id="batch-date" required>
+                        </label>
+                        <button class="primary-button" id="load-batch-btn">Load Sheet</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Reg No</th>
+                                    <th>Name</th>
+                                    <th>Mark Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="batch-table-body">
+                                <tr><td colspan="3" class="empty-state">Select a date and load members.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button class="primary-button" id="save-batch-btn" style="display: none; background: #10b981;">Save All Records</button>
+                    </div>
+                </section>
+            </section>
+
+            <section class="page" id="shortage">
+                <section class="panel">
+                    <div class="panel-header">
+                        <h3>Shortage List (Below 75%)</h3>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="cursor: pointer;" onclick="sortTable('shortage-table-body', 0)">Reg No ↕️</th>
+                                    <th style="cursor: pointer;" onclick="sortTable('shortage-table-body', 1)">Name ↕️</th>
+                                    <th style="cursor: pointer;" onclick="sortTable('shortage-table-body', 2)">Attendance ↕️</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shortage-table-body">
+                                <tr><td colspan="3" class="empty-state">All students above 75%.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <section class="page" id="records">
+                <section class="panel">
+                    <div class="panel-header" style="flex-wrap: wrap; gap: 15px;">
+                        <h3>Attendance Records</h3>
+                        <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
+                            <input type="date" id="clear-date-input" style="padding: 8px; border-radius: 6px; background: #ffffff; border: 1px solid #ccc; color: #000000;">
+                            <button class="primary-button" id="clear-date-btn" style="background: #dc2626; padding: 8px 12px; font-size: 14px;">🗑️ Clear Date</button>
+                        </div>
+                        <button class="primary-button" id="export-csv-btn" style="background: #2563eb;">📥 Export CSV</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Reg No</th>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body">
+                                <tr><td colspan="4" class="empty-state">No records found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+        </main>
+
+        <div class="toast" id="toast"></div>
+
+        <div id="student-profile-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9998; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+            <div style="background: #18181b; color: #fff; padding: 30px; border-radius: 12px; max-width: 480px; width: 90%; border: 1px solid #3f3f46; position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+                <button onclick="closeProfileModal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 20px; color: #fff; cursor: pointer; opacity: 0.6;">✕</button>
+                <h3 id="profile-name" style="margin-bottom: 5px; color: #38bdf8;">Student Name</h3>
+                <p id="profile-id" style="color: #a1a1aa; margin-bottom: 20px;">Reg No: #</p>
+                <div class="cards" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                    <div class="card" style="padding: 15px; background: #27272a; border-color: #3f3f46;">
+                        <span style="font-size: 14px; color: #a1a1aa;">Attended</span>
+                        <h4 id="profile-attended" style="color: #fff;">0/0</h4>
+                    </div>
+                    <div class="card" style="padding: 15px; background: #27272a; border-color: #3f3f46;">
+                        <span style="font-size: 14px; color: #a1a1aa;">Current %</span>
+                        <h4 id="profile-percent" style="color: #fff;">0.00%</h4>
+                    </div>
+                </div>
+                <h5>Direct Absence History</h5>
+                <div id="profile-absence-list" style="max-height: 180px; overflow-y: auto; margin-top: 10px; border-top: 1px solid #3f3f46; padding-top: 10px;">
+                </div>
+
+                <!-- Delete Student Button -->
+                <div style="margin-top: 25px; border-top: 1px solid #3f3f46; padding-top: 15px;">
+                    <button id="delete-student-modal-btn" style="width: 100%; background: #dc2626; color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;">🗑️ Delete Student Profile</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script src="attendance.js"></script>
+</body>
+</html>
